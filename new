@@ -1,0 +1,137 @@
+%pip install tensorflow matplotlib
+
+
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import zipfile
+import os
+import numpy as np
+
+zip_path = "catsdogs.zip"
+extract_path = "dataset"
+
+with zipfile.ZipFile(zip_path, "r") as zip_ref:
+    zip_ref.extractall(extract_path)
+
+data_path = os.path.join(extract_path, "train")
+
+print("Dataset extracted successfully!")
+print(os.listdir(data_path))
+
+
+
+
+train_data = tf.keras.utils.image_dataset_from_directory(
+    data_path,
+    validation_split=0.2,
+    subset="training",
+    seed=123,
+    image_size=(224, 224),
+    batch_size=32,
+    label_mode="binary"
+)
+
+val_data = tf.keras.utils.image_dataset_from_directory(
+    data_path,
+    validation_split=0.2,
+    subset="validation",
+    seed=123,
+    image_size=(224, 224),
+    batch_size=32,
+    label_mode="binary"
+)
+
+print("Classes:", train_data.class_names)
+
+
+
+
+base_model = tf.keras.applications.MobileNetV2(
+    input_shape=(224, 224, 3),
+    include_top=False,
+    weights="imagenet"
+)
+
+print("Pretrained MobileNetV2 loaded successfully!")
+
+
+base_model.trainable = False
+
+print("Convolutional layers frozen")
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Input(shape=(224, 224, 3)),
+
+    tf.keras.layers.Lambda(
+        tf.keras.applications.mobilenet_v2.preprocess_input
+    ),
+
+    base_model,
+
+    tf.keras.layers.GlobalAveragePooling2D(),
+
+    tf.keras.layers.Dense(128, activation="relu"),
+
+    tf.keras.layers.Dropout(0.2),
+
+    tf.keras.layers.Dense(1, activation="sigmoid")
+])
+
+model.summary()
+
+model.compile(
+    optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+    loss="binary_crossentropy",
+    metrics=["accuracy"]
+)
+
+history = model.fit(
+    train_data,
+    validation_data=val_data,
+    epochs=3
+)
+
+base_model.trainable = True
+
+# Freeze earlier layers
+for layer in base_model.layers[:-20]:
+    layer.trainable = False
+
+model.compile(
+    optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
+    loss="binary_crossentropy",
+    metrics=["accuracy"]
+)
+
+history_fine = model.fit(
+    train_data,
+    validation_data=val_data,
+    epochs=2
+)
+
+plt.plot(history.history["accuracy"], label="Training Accuracy")
+plt.plot(history.history["val_accuracy"], label="Validation Accuracy")
+plt.xlabel("Epoch")
+plt.ylabel("Accuracy")
+plt.title("MobileNetV2 Transfer Learning")
+plt.legend()
+plt.show()
+
+
+
+
+img = tf.keras.utils.load_img(
+    "dataset/images/cats/cat1.jpg",
+    target_size=(224, 224)
+)
+
+img = tf.keras.utils.img_to_array(img)
+img = tf.expand_dims(img, axis=0)
+
+prediction = model.predict(img)
+
+if prediction[0][0] >= 0.5:
+    print("Dog")
+else:
+    print("Cat")
+
