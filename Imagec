@@ -1,0 +1,67 @@
+import tensorflow as tf
+import matplotlib.pyplot as plt
+from tensorflow import keras
+from tensorflow.keras import layers
+
+# Load uploaded dataset
+train_ds = keras.utils.image_dataset_from_directory(
+    "PetImages",
+    validation_split=0.2,
+    subset="training",
+    seed=42,
+    image_size=(160, 160),
+    batch_size=16
+)
+
+val_ds = keras.utils.image_dataset_from_directory(
+    "PetImages",
+    validation_split=0.2,
+    subset="validation",
+    seed=42,
+    image_size=(160, 160),
+    batch_size=16
+)
+
+# Load pretrained MobileNetV2
+base_model = keras.applications.MobileNetV2(
+    weights="imagenet",
+    include_top=False,
+    input_shape=(160, 160, 3)
+)
+
+base_model.trainable = False
+
+# Add classification layers
+model = keras.Sequential([
+    layers.Rescaling(1./127.5, offset=-1),
+    base_model,
+    layers.GlobalAveragePooling2D(),
+    layers.Dense(32, activation="relu"),
+    layers.Dense(2, activation="softmax")
+])
+
+# Compile model
+model.compile(
+    optimizer="adam",
+    loss="sparse_categorical_crossentropy",
+    metrics=["accuracy"]
+)
+
+# Train model
+history = model.fit(
+    train_ds,
+    validation_data=val_ds,
+    epochs=3
+)
+
+# Evaluate model
+loss, accuracy = model.evaluate(val_ds)
+print("Validation accuracy:", round(accuracy * 100, 2), "%")
+
+# Plot accuracy
+plt.plot(history.history["accuracy"], label="Training")
+plt.plot(history.history["val_accuracy"], label="Validation")
+plt.xlabel("Epoch")
+plt.ylabel("Accuracy")
+plt.legend()
+plt.show()
